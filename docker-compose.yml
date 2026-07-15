@@ -1,0 +1,47 @@
+# ---------------------------------------------------------------------------
+# Runs the whole app with one command: `docker compose up -d --build`
+#
+# - backend  -> exposed on host port 4000 (REST + WebSocket)
+# - frontend -> exposed on host port 8080 (static React build via nginx)
+#
+# For a real deployment, put a reverse proxy (see reverse-proxy/nginx.conf)
+# or your hosting provider's load balancer in front of both, terminate
+# TLS there, and route:
+#   /            -> frontend:80
+#   /api, /ws    -> backend:4000
+# ---------------------------------------------------------------------------
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: agentcord-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend-data:/app/data   # persists the SQLite DB across restarts/rebuilds
+    environment:
+      - PORT=4000
+      # Set this to your real frontend URL in production, e.g.:
+      # - CORS_ORIGIN=https://agentcord.your-domain.com
+      - CORS_ORIGIN=*
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Change these to your real public backend URL when deploying.
+        # If you're using the reverse-proxy setup below (single domain),
+        # these can just be relative: "" and "/ws".
+        REACT_APP_API_BASE: http://localhost:4000
+        REACT_APP_WS_URL: ws://localhost:4000/ws
+    container_name: agentcord-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend-data:
