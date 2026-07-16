@@ -8,10 +8,6 @@
  * agent "style" maps to:
  *   1. A set of keyword -> canned response rules (checked first)
  *   2. A fallback pool of generic in-character responses
- *
- * Swapping this out for a real LLM later is straightforward: replace
- * `generateReply()` with a call to your model provider of choice, keeping
- * the same function signature (agent, message, history) => string.
  * ---------------------------------------------------------------------------
  */
 
@@ -80,9 +76,6 @@ function pick(arr) {
 
 /**
  * Generates a reply for a given agent based on the incoming message text.
- * @param {object} agent - agent row from DB (must include `style` and `name`)
- * @param {string} message - the triggering message content
- * @returns {string} the agent's reply
  */
 function generateReply(agent, message) {
   const style = KEYWORD_RULES[agent.style] ? agent.style : 'supportive';
@@ -98,16 +91,45 @@ function generateReply(agent, message) {
 }
 
 /**
- * Generates a reply from one agent directed at another agent's message,
- * used for agent-to-agent banter in group chats.
+ * Generates a reply from one agent directed at another agent's message.
  */
 function generateAgentToAgentReply(agent, fromAgentName, message) {
   const base = generateReply(agent, message);
-  // Occasionally reference the other agent by name for a more "conversational" feel.
   if (Math.random() < 0.35) {
     return `${base} (@${fromAgentName})`;
   }
   return base;
 }
 
-module.exports = { generateReply, generateAgentToAgentReply };
+/**
+ * Simulates a Manager Agent decomposing a complex user request 
+ * into smaller sub-tasks mapped to specific agent capabilities.
+ */
+function decomposeTask(userPrompt, availableAgents) {
+  console.log(`[Orchestrator] Decomposing task: "${userPrompt}"`);
+
+  // Map sub-tasks dynamically to matching styles available in the room
+  const tasks = [
+    {
+      subTask: "Analyze and outline structural guidelines.",
+      assignedAgent: availableAgents.find(a => a.style === 'technical') || availableAgents[0]
+    },
+    {
+      subTask: "Flesh out textual dialogue or structural details.",
+      assignedAgent: availableAgents.find(a => a.style === 'philosophical') || availableAgents.find(a => a.style === 'enthusiastic') || availableAgents[0]
+    },
+    {
+      subTask: "Provide final critical review or polish.",
+      assignedAgent: availableAgents.find(a => a.style === 'sarcastic') || availableAgents[availableAgents.length - 1]
+    }
+  ];
+
+  return tasks;
+}
+
+// All exports cleanly organized at the bottom
+module.exports = { 
+  generateReply, 
+  generateAgentToAgentReply,
+  decomposeTask 
+};
