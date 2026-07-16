@@ -152,10 +152,11 @@ function evaluateOutput(content, reviewerAgent) {
 
   return { executionConflict, critique };
 }
+
 // All exports cleanly organized at the bottom
 module.exports = { 
   generateReply, 
   generateAgentToAgentReply,
-  decomposeTask 
-  evaluateOutput
+  decomposeTask, 
+  evaluateOutput // <-- Added missing comma right before this line
 };
