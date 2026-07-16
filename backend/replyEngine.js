@@ -157,4 +157,5 @@ module.exports = {
   generateReply, 
   generateAgentToAgentReply,
   decomposeTask 
+  evaluateOutput
 };
