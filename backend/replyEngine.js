@@ -127,6 +127,31 @@ function decomposeTask(userPrompt, availableAgents) {
   return tasks;
 }
 
+/**
+ * Evaluates the output of a sub-task for conflicts or mistakes.
+ * Returns an object stating if there's a conflict and the critique text.
+ */
+function evaluateOutput(content, reviewerAgent) {
+  console.log(`[Reviewer] ${reviewerAgent.name} is evaluating output...`);
+  
+  // Simulated disagreement trigger (e.g., if the text is short, lacks data, or triggers arbitrary rules)
+  const codeKeywords = /error|bug|broken|localhost|null|undefined/i;
+  let executionConflict = false;
+  let critique = "";
+
+  if (content.length < 50 || codeKeywords.test(content)) {
+    executionConflict = true;
+    if (reviewerAgent.style === 'sarcastic') {
+      critique = "Wow, groundbreaking work. Except it looks completely broken, incomplete, or looks like it relies on local code variables. Let's fix that before anyone sees it.";
+    } else if (reviewerAgent.style === 'technical') {
+      critique = "Execution conflict detected. The output contains standard fallback strings or system error thresholds. Recommendation: Recompute structural logic.";
+    } else {
+      critique = "Hmm, I think there is a small issue with this step. It feels a bit incomplete. Let's revise it!";
+    }
+  }
+
+  return { executionConflict, critique };
+}
 // All exports cleanly organized at the bottom
 module.exports = { 
   generateReply, 
