@@ -23,7 +23,8 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const store = require('./db');
-const { generateReply, generateAgentToAgentReply } = require('./replyEngine');
+// Imports cleanly declared at the top, including your new orchestrator task function
+const { generateReply, generateAgentToAgentReply, decomposeTask } = require('./replyEngine');
 
 const PORT = process.env.PORT || 4000;
 const USER_ID = 'user-1';
@@ -106,35 +107,52 @@ function delay(ms) {
 
 /**
  * Runs the agent response pipeline for a channel after a triggering message.
- * - Every agent in the channel replies to the user's message.
- * - In group channels, there's a chance for agents to riff off each other
- *   for a couple of extra rounds (capped) to feel like a real group chat.
+ * - Decomposes the user task first into an organized structural blueprint.
+ * - Every assigned agent processes its given piece sequentially.
+ * - Runs an extra banter round at the end for group chats.
  */
 async function runAgentResponses(channel, triggerSenderName, triggerContent) {
   const agents = channel.members;
+  if (!agents || agents.length === 0) return;
+
+  // 1. Task Decomposition Phase
+  await delay(500);
+  const plan = decomposeTask(triggerContent, agents);
+  
+  let planSummary = "📋 **Task Collaboration Blueprint Generated:**\n";
+  plan.forEach((step, index) => {
+    planSummary += `${index + 1}. [${step.assignedAgent.name}] ➔ ${step.subTask}\n`;
+  });
+
+  // Broadcast blueprint plan to UI
+  const blueprintMsg = store.addMessage(channel.id, 'orchestrator', 'System Orchestrator', planSummary);
+  broadcast({ type: 'message', channelId: channel.id, message: blueprintMsg });
+
   let lastSpeakerName = triggerSenderName;
   let lastContent = triggerContent;
 
-  for (const agent of agents) {
-    // typing delay so it feels real-time rather than instant
-    await delay(600 + Math.random() * 900);
+  // 2. Targeted Execution Phase based on Roles
+  for (const step of plan) {
+    const currentAgent = step.assignedAgent;
 
-    broadcast({ type: 'typing', channelId: channel.id, agentId: agent.id, agentName: agent.name });
-    await delay(400 + Math.random() * 600);
+    await delay(800 + Math.random() * 600);
+    broadcast({ type: 'typing', channelId: channel.id, agentId: currentAgent.id, agentName: currentAgent.name });
+    await delay(600 + Math.random() * 400);
 
-    const replyText =
-      lastSpeakerName === USER_NAME
-        ? generateReply(agent, lastContent)
-        : generateAgentToAgentReply(agent, lastSpeakerName, lastContent);
+    const executionContext = `[Executing Role: ${step.subTask}] Previous context: ${lastContent}`;
+    
+    const replyText = lastSpeakerName === USER_NAME
+        ? generateReply(currentAgent, executionContext)
+        : generateAgentToAgentReply(currentAgent, lastSpeakerName, executionContext);
 
-    const saved = store.addMessage(channel.id, agent.id, agent.name, replyText);
+    const saved = store.addMessage(channel.id, currentAgent.id, currentAgent.name, `🛠️ **Sub-task Output:** ${replyText}`);
     broadcast({ type: 'message', channelId: channel.id, message: saved });
 
-    lastSpeakerName = agent.name;
+    lastSpeakerName = currentAgent.name;
     lastContent = replyText;
   }
 
-  // Extra banter round for group chats (agents responding to the last agent)
+  // 3. Extra banter round for group chats (now safely encapsulated inside the function)
   if (channel.is_group && agents.length > 1 && Math.random() < 0.6) {
     const responder = agents[Math.floor(Math.random() * agents.length)];
     await delay(800 + Math.random() * 800);
