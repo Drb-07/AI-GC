@@ -124,14 +124,16 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
     planSummary += `${index + 1}. [${step.assignedAgent.name}] ➔ ${step.subTask}\n`;
   });
 
-  // Broadcast blueprint plan to UI
   const blueprintMsg = store.addMessage(channel.id, 'orchestrator', 'System Orchestrator', planSummary);
   broadcast({ type: 'message', channelId: channel.id, message: blueprintMsg });
 
   let lastSpeakerName = triggerSenderName;
   let lastContent = triggerContent;
 
-  // 2. Targeted Execution Phase based on Roles
+  // Select a designated reviewer agent for conflicts (preferring sarcastic or technical styles)
+  const reviewerAgent = agents.find(a => a.style === 'sarcastic' || a.style === 'technical') || agents[0];
+
+  // 2. Targeted Execution & Conflict Resolution Phase
   for (const step of plan) {
     const currentAgent = step.assignedAgent;
 
@@ -140,10 +142,33 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
     await delay(600 + Math.random() * 400);
 
     const executionContext = `[Executing Role: ${step.subTask}] Previous context: ${lastContent}`;
-    
-    const replyText = lastSpeakerName === USER_NAME
+    let replyText = lastSpeakerName === USER_NAME
         ? generateReply(currentAgent, executionContext)
         : generateAgentToAgentReply(currentAgent, lastSpeakerName, executionContext);
+
+    // --- NEW: Disagreement & Conflict Resolution Logic ---
+    const review = evaluateOutput(replyText, reviewerAgent);
+    
+    if (review.executionConflict) {
+      // Step A: Broadcast the Reviewer's Disagreement
+      await delay(600);
+      const conflictMsg = store.addMessage(
+        channel.id, 
+        reviewerAgent.id, 
+        reviewerAgent.name, 
+        `⚠️ **Disagreement Raised:** "${review.critique}"`
+      );
+      broadcast({ type: 'message', channelId: channel.id, message: conflictMsg });
+
+      // Step B: The original worker agent processes the critique and attempts a fix
+      await delay(1000);
+      broadcast({ type: 'typing', channelId: channel.id, agentId: currentAgent.id, agentName: currentAgent.name });
+      await delay(600);
+      
+      const correctionContext = `[Resolving Conflict] Your previous output was criticized: "${review.critique}". Please fix it.`;
+      replyText = `[Resolved Output] Correcting layout specs. Baseline verified. System requirements met. Context optimized.`;
+    }
+    // -----------------------------------------------------
 
     const saved = store.addMessage(channel.id, currentAgent.id, currentAgent.name, `🛠️ **Sub-task Output:** ${replyText}`);
     broadcast({ type: 'message', channelId: channel.id, message: saved });
@@ -151,6 +176,19 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
     lastSpeakerName = currentAgent.name;
     lastContent = replyText;
   }
+
+  // 3. Extra banter round for group chats
+  if (channel.is_group && agents.length > 1 && Math.random() < 0.6) {
+    const responder = agents[Math.floor(Math.random() * agents.length)];
+    await delay(800 + Math.random() * 800);
+    broadcast({ type: 'typing', channelId: channel.id, agentId: responder.id, agentName: responder.name });
+    await delay(500 + Math.random() * 500);
+
+    const replyText = generateAgentToAgentReply(responder, lastSpeakerName, lastContent);
+    const saved = store.addMessage(channel.id, responder.id, responder.name, replyText);
+    broadcast({ type: 'message', channelId: channel.id, message: saved });
+  }
+}
 
   // 3. Extra banter round for group chats (now safely encapsulated inside the function)
   if (channel.is_group && agents.length > 1 && Math.random() < 0.6) {
