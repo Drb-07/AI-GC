@@ -12,8 +12,6 @@
  *          and respond, persisting + broadcasting each response.
  *       c. In group chats, agents occasionally reply to each other too,
  *          creating multi-agent banter (capped to avoid infinite loops).
- *
- * Run with: npm start (see package.json)
  * ---------------------------------------------------------------------------
  */
 
@@ -23,8 +21,8 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const store = require('./db');
-// FIX 1: Added evaluateOutput to the imports at the top
-const { generateReply, generateAgentToAgentReply, decomposeTask, evaluateOutput } = require('./replyEngine');
+// UPDATED: Brought in runBenchmarkMetric along with the other engine helpers
+const { generateReply, generateAgentToAgentReply, decomposeTask, evaluateOutput, runBenchmarkMetric } = require('./replyEngine');
 
 const PORT = process.env.PORT || 4000;
 const USER_ID = 'user-1';
@@ -32,8 +30,6 @@ const USER_NAME = 'You';
 
 const app = express();
 
-// In production, set CORS_ORIGIN to your frontend's real URL (e.g.
-// https://app.your-domain.com) instead of leaving it wide open.
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
@@ -86,13 +82,25 @@ app.get('/api/channels/:id/messages', (req, res) => {
   res.json(store.getMessages(req.params.id));
 });
 
+// -- Benchmarking & Efficiency Metrics ------------------------------------
+app.post('/api/benchmark', (req, res) => {
+  const { content } = req.body;
+  const agents = store.getAllAgents();
+  
+  if (!content) {
+    return res.status(400).json({ error: 'Prompt content is required for testing' });
+  }
+  
+  const report = runBenchmarkMetric(content, agents);
+  res.json(report);
+});
+
 // ---------------------------------------------------------------------------
 // HTTP + WebSocket server
 // ---------------------------------------------------------------------------
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
-/** Broadcast a message payload to all connected clients. */
 function broadcast(payload) {
   const data = JSON.stringify(payload);
   wss.clients.forEach((client) => {
@@ -100,18 +108,10 @@ function broadcast(payload) {
   });
 }
 
-/** Small helper to simulate "typing" latency before an agent responds. */
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Runs the agent response pipeline for a channel after a triggering message.
- * - Decomposes the user task first into an organized structural blueprint.
- * - Every assigned agent processes its given piece sequentially.
- * - Resolves execution conflicts if an agent's output fails criteria thresholds.
- * - Runs an extra banter round at the end for group chats.
- */
 async function runAgentResponses(channel, triggerSenderName, triggerContent) {
   const agents = channel.members;
   if (!agents || agents.length === 0) return;
@@ -131,7 +131,6 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
   let lastSpeakerName = triggerSenderName;
   let lastContent = triggerContent;
 
-  // Select a designated reviewer agent for conflicts (preferring sarcastic or technical styles)
   const reviewerAgent = agents.find(a => a.style === 'sarcastic' || a.style === 'technical') || agents[0];
 
   // 2. Targeted Execution & Conflict Resolution Phase
@@ -151,7 +150,6 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
     const review = evaluateOutput(replyText, reviewerAgent);
     
     if (review.executionConflict) {
-      // Step A: Broadcast the Reviewer's Disagreement
       await delay(600);
       const conflictMsg = store.addMessage(
         channel.id, 
@@ -161,14 +159,12 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
       );
       broadcast({ type: 'message', channelId: channel.id, message: conflictMsg });
 
-      // Step B: The original worker agent processes the critique and attempts a fix
       await delay(1000);
       broadcast({ type: 'typing', channelId: channel.id, agentId: currentAgent.id, agentName: currentAgent.name });
       await delay(600);
       
       replyText = `[Resolved Output] Correcting layout specs. Baseline verified. System requirements met. Context optimized.`;
     }
-    // -----------------------------------------------------
 
     const saved = store.addMessage(channel.id, currentAgent.id, currentAgent.name, `🛠️ **Sub-task Output:** ${replyText}`);
     broadcast({ type: 'message', channelId: channel.id, message: saved });
@@ -188,7 +184,7 @@ async function runAgentResponses(channel, triggerSenderName, triggerContent) {
     const saved = store.addMessage(channel.id, responder.id, responder.name, replyText);
     broadcast({ type: 'message', channelId: channel.id, message: saved });
   }
-} // FIX 2: Correctly closed the function here and removed duplicate stray code blocks.
+}
 
 wss.on('connection', (ws) => {
   console.log('Client connected');
@@ -206,11 +202,9 @@ wss.on('connection', (ws) => {
       const channel = store.getChannel(channelId);
       if (!channel) return;
 
-      // 1. Persist + broadcast the user's message immediately
       const saved = store.addMessage(channelId, USER_ID, USER_NAME, content);
       broadcast({ type: 'message', channelId, message: saved });
 
-      // 2. Kick off agent response pipeline (fire and forget)
       runAgentResponses(channel, USER_NAME, content).catch((err) =>
         console.error('Error generating agent responses:', err)
       );
