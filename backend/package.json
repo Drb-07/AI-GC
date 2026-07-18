@@ -17,7 +17,8 @@
     "ws": "^8.16.0",
     "uuid": "^9.0.1",
     "openai": "^4.56.0",
-    "@google/generative-ai": "^0.17.1"
+    "@google/generative-ai": "^0.17.1",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
