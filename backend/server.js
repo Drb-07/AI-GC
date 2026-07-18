@@ -6,12 +6,16 @@
  *  1. REST API (Express) — CRUD for agents, friendships, and channels, plus
  *     fetching message history.
  *  2. WebSocket server (ws) — real-time message broadcast. When the user
- *     sends a message into a channel, we:
- *       a. Persist + broadcast it immediately.
- *       b. Trigger every agent in that channel to "think" (simulated delay)
- *          and respond, persisting + broadcasting each response.
- *       c. In group chats, agents occasionally reply to each other too,
- *          creating multi-agent banter (capped to avoid infinite loops).
+ *     sends a message into a channel, we trigger a sequential 4-stage
+ *     multi-agent pipeline:
+ *       Stage 1: Orchestrator decomposes the prompt into sub-tasks.
+ *       Stage 2: Generator (ChatGPT) drafts a solution.
+ *       Stage 3: Researcher (Gemini) runs logical verification.
+ *       Stage 4: Validator (Critic) resolves any conflicts and appends
+ *                the Efficiency Card.
+ *     Each stage is persisted + broadcast as its own message so judges can
+ *     watch task decomposition, drafting, verification, and conflict
+ *     resolution happen live, one after another.
  * ---------------------------------------------------------------------------
  */
 
@@ -21,8 +25,7 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const store = require('./db');
-// UPDATED: Brought in runBenchmarkMetric along with the other engine helpers
-const { generateReply, generateAgentToAgentReply, decomposeTask, evaluateOutput, runBenchmarkMetric } = require('./replyEngine');
+const { generateReply, generateAgentToAgentReply, runPipeline, runBenchmarkMetric } = require('./replyEngine');
 
 const PORT = process.env.PORT || 4000;
 const USER_ID = 'user-1';
@@ -41,6 +44,30 @@ app.use(express.json());
 // -- Agents -------------------------------------------------------------
 app.get('/api/agents', (req, res) => {
   res.json(store.getAllAgents());
+});
+
+// Dynamically create a custom agent from the frontend "Create Agent" form.
+app.post('/api/agents', (req, res) => {
+  const { name, avatar_emoji, personality, color, style, engine } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+
+  try {
+    const agent = store.addCustomAgent({
+      name: name.trim(),
+      avatar_emoji: avatar_emoji || '🤖',
+      personality: personality || 'A custom AI agent.',
+      color: color || '#5865f2',
+      style: style || 'supportive',
+      engine: engine || 'gpt-4o',
+    });
+    res.status(201).json(agent);
+  } catch (err) {
+    console.error('Failed to create custom agent:', err);
+    res.status(500).json({ error: 'Failed to create agent' });
+  }
 });
 
 // -- Friendships ----------------------------------------------------------
@@ -86,11 +113,11 @@ app.get('/api/channels/:id/messages', (req, res) => {
 app.post('/api/benchmark', (req, res) => {
   const { content } = req.body;
   const agents = store.getAllAgents();
-  
+
   if (!content) {
     return res.status(400).json({ error: 'Prompt content is required for testing' });
   }
-  
+
   const report = runBenchmarkMetric(content, agents);
   res.json(report);
 });
@@ -112,75 +139,57 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runAgentResponses(channel, triggerSenderName, triggerContent) {
+async function sendStageMessage(channel, agent, content) {
+  await delay(400 + Math.random() * 400);
+  broadcast({ type: 'typing', channelId: channel.id, agentId: agent.id, agentName: agent.name });
+  await delay(500 + Math.random() * 500);
+
+  const saved = store.addMessage(channel.id, agent.id, agent.name, content);
+  broadcast({ type: 'message', channelId: channel.id, message: saved });
+  return saved;
+}
+
+/**
+ * Orchestrates the 4-stage pipeline: Orchestrator -> Generator -> Researcher
+ * -> Validator. Each stage is persisted and broadcast the moment it
+ * completes, so the frontend renders them one at a time in order.
+ */
+async function runAgentResponses(channel, triggerContent) {
   const agents = channel.members;
   if (!agents || agents.length === 0) return;
 
-  // 1. Task Decomposition Phase
-  await delay(500);
-  const plan = decomposeTask(triggerContent, agents);
-  
-  let planSummary = "📋 **Task Collaboration Blueprint Generated:**\n";
-  plan.forEach((step, index) => {
-    planSummary += `${index + 1}. [${step.assignedAgent.name}] ➔ ${step.subTask}\n`;
-  });
-
-  const blueprintMsg = store.addMessage(channel.id, 'orchestrator', 'System Orchestrator', planSummary);
-  broadcast({ type: 'message', channelId: channel.id, message: blueprintMsg });
-
-  let lastSpeakerName = triggerSenderName;
-  let lastContent = triggerContent;
-
-  const reviewerAgent = agents.find(a => a.style === 'sarcastic' || a.style === 'technical') || agents[0];
-
-  // 2. Targeted Execution & Conflict Resolution Phase
-  for (const step of plan) {
-    const currentAgent = step.assignedAgent;
-
-    await delay(800 + Math.random() * 600);
-    broadcast({ type: 'typing', channelId: channel.id, agentId: currentAgent.id, agentName: currentAgent.name });
-    await delay(600 + Math.random() * 400);
-
-    const executionContext = `[Executing Role: ${step.subTask}] Previous context: ${lastContent}`;
-    let replyText = lastSpeakerName === USER_NAME
-        ? generateReply(currentAgent, executionContext)
-        : generateAgentToAgentReply(currentAgent, lastSpeakerName, executionContext);
-
-    // --- Disagreement & Conflict Resolution Logic ---
-    const review = evaluateOutput(replyText, reviewerAgent);
-    
-    if (review.executionConflict) {
-      await delay(600);
-      const conflictMsg = store.addMessage(
-        channel.id, 
-        reviewerAgent.id, 
-        reviewerAgent.name, 
-        `⚠️ **Disagreement Raised:** "${review.critique}"`
-      );
-      broadcast({ type: 'message', channelId: channel.id, message: conflictMsg });
-
-      await delay(1000);
-      broadcast({ type: 'typing', channelId: channel.id, agentId: currentAgent.id, agentName: currentAgent.name });
-      await delay(600);
-      
-      replyText = `[Resolved Output] Correcting layout specs. Baseline verified. System requirements met. Context optimized.`;
-    }
-
-    const saved = store.addMessage(channel.id, currentAgent.id, currentAgent.name, `🛠️ **Sub-task Output:** ${replyText}`);
-    broadcast({ type: 'message', channelId: channel.id, message: saved });
-
-    lastSpeakerName = currentAgent.name;
-    lastContent = replyText;
+  let pipeline;
+  try {
+    pipeline = await runPipeline(triggerContent, agents);
+  } catch (err) {
+    console.error('[Pipeline] failed unexpectedly:', err);
+    return;
   }
 
-  // 3. Extra banter round for group chats
-  if (channel.is_group && agents.length > 1 && Math.random() < 0.6) {
-    const responder = agents[Math.floor(Math.random() * agents.length)];
-    await delay(800 + Math.random() * 800);
+  // Stage 1: Orchestrator — task decomposition
+  await sendStageMessage(channel, pipeline.orchestrator.agent, pipeline.orchestrator.content);
+
+  // Stage 2: Generator — draft solution
+  await sendStageMessage(channel, pipeline.generator.agent, pipeline.generator.content);
+
+  // Stage 3: Researcher — logical verification
+  await sendStageMessage(channel, pipeline.researcher.agent, pipeline.researcher.content);
+
+  // Stage 4: Validator — conflict resolution + Efficiency Card
+  await sendStageMessage(channel, pipeline.validator.agent, pipeline.validator.content);
+
+  // Optional extra banter round for group chats with more than the 4 core
+  // agents (e.g. a custom agent the user added as a "friend").
+  const extraAgents = agents.filter(
+    (a) => !['orchestrator', 'generator', 'researcher', 'validator'].includes(a.style)
+  );
+  if (channel.is_group && extraAgents.length > 0 && Math.random() < 0.6) {
+    const responder = extraAgents[Math.floor(Math.random() * extraAgents.length)];
+    await delay(700 + Math.random() * 700);
     broadcast({ type: 'typing', channelId: channel.id, agentId: responder.id, agentName: responder.name });
     await delay(500 + Math.random() * 500);
 
-    const replyText = generateAgentToAgentReply(responder, lastSpeakerName, lastContent);
+    const replyText = generateAgentToAgentReply(responder, pipeline.validator.agent.name, pipeline.validator.content);
     const saved = store.addMessage(channel.id, responder.id, responder.name, replyText);
     broadcast({ type: 'message', channelId: channel.id, message: saved });
   }
@@ -205,7 +214,7 @@ wss.on('connection', (ws) => {
       const saved = store.addMessage(channelId, USER_ID, USER_NAME, content);
       broadcast({ type: 'message', channelId, message: saved });
 
-      runAgentResponses(channel, USER_NAME, content).catch((err) =>
+      runAgentResponses(channel, content).catch((err) =>
         console.error('Error generating agent responses:', err)
       );
     }
