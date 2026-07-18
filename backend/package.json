@@ -15,7 +15,9 @@
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "ws": "^8.16.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "openai": "^4.56.0",
+    "@google/generative-ai": "^0.17.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
