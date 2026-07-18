@@ -14,6 +14,8 @@ export default function Sidebar({
   onSelectChannel,
   onOpenAddFriend,
   onOpenNewGroup,
+  currentUser,
+  onLogout,
 }) {
   return (
     <div className="sidebar">
@@ -58,6 +60,18 @@ export default function Sidebar({
           </div>
         ))}
       </div>
+
+      {currentUser && (
+        <div className="sidebar-footer">
+          <div className="sidebar-user">
+            <div className="sidebar-user-name">{currentUser.name}</div>
+            <div className="sidebar-user-email">{currentUser.email}</div>
+          </div>
+          <button className="sidebar-btn sidebar-logout" onClick={onLogout}>
+            Log Out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
