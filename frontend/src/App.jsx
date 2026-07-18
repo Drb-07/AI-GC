@@ -155,6 +155,10 @@ export default function App() {
           friendIds={friendIds}
           onToggleFriend={handleToggleFriend}
           onClose={() => setShowAddFriend(false)}
+          onAgentsChanged={async () => {
+            const agentsData = await api.getAgents();
+            setAgents(agentsData || []);
+          }}
         />
       )}
 
