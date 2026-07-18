@@ -383,3 +383,188 @@ body {
   color: #949ba4;
   margin: 8px 0;
 }
+
+/* ---------------------------------------------------------------------
+   Auth page (login/signup)
+--------------------------------------------------------------------- */
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: #949ba4;
+  background: #1e1f22;
+  font-size: 15px;
+}
+
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #1e1f22;
+}
+
+.auth-card {
+  width: 360px;
+  max-width: 90vw;
+  background: #2b2d31;
+  border-radius: 10px;
+  padding: 32px 28px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.auth-card h1 {
+  color: #fff;
+  font-size: 22px;
+  margin: 0 0 4px;
+  text-align: center;
+}
+
+.auth-subtitle {
+  color: #949ba4;
+  font-size: 14px;
+  text-align: center;
+  margin: 0 0 20px;
+}
+
+.auth-switch {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #00a8fc;
+  font-size: 13px;
+  margin-top: 14px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.auth-switch:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------
+   Generic form rows (used by AuthPage + AddFriendModal create-agent form)
+--------------------------------------------------------------------- */
+.form-row {
+  margin-bottom: 14px;
+}
+
+.form-row label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #949ba4;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.form-row input,
+.form-row select,
+.form-row textarea {
+  width: 100%;
+  background: #383a40;
+  border: 1px solid #1e1f22;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #dbdee1;
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.form-row input:focus,
+.form-row select:focus,
+.form-row textarea:focus {
+  outline: none;
+  border-color: #00a8fc;
+}
+
+.form-row textarea {
+  resize: vertical;
+}
+
+.form-error {
+  background: rgba(237, 66, 69, 0.15);
+  color: #f77;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+/* ---------------------------------------------------------------------
+   Create-agent form chips (AddFriendModal)
+--------------------------------------------------------------------- */
+.choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-chip {
+  background: #383a40;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-size: 18px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+}
+
+.choice-chip--selected {
+  border-color: #00a8fc;
+}
+
+.color-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.color-chip--selected {
+  border-color: #fff;
+}
+
+.agent-row-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #232428;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+/* ---------------------------------------------------------------------
+   Sidebar footer (logged-in user + logout)
+--------------------------------------------------------------------- */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px;
+  border-top: 1px solid #1e1f22;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-user-name {
+  color: #dbdee1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar-user-email {
+  color: #949ba4;
+  font-size: 11px;
+}
+
+.sidebar-logout {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+}
