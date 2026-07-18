@@ -8,8 +8,11 @@
  * ---------------------------------------------------------------------------
  */
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4000';
-const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:4000/ws';
+// Reads the variable you configured in Vercel, falls back to local port 10000 if not found
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
+
+// Automatically builds the WebSocket secure (wss://) string using your backend domain url
+const WS_URL = API_BASE.replace(/^http/, 'ws') + '/ws';
 
 // ---------------------------------------------------------------------------
 // REST helpers
