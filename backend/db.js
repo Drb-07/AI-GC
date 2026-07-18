@@ -133,6 +133,17 @@ module.exports = {
     return db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   },
 
+  // Inserts a user-created custom agent (from the "Create Agent" UI form)
+  // and returns the persisted row.
+  addCustomAgent({ name, avatar_emoji, personality, color, style }) {
+    const id = `agent-custom-${uuid()}`;
+    db.prepare(`
+      INSERT INTO agents (id, name, avatar_emoji, personality, color, style)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, name, avatar_emoji, personality, color, style);
+    return this.getAgent(id);
+  },
+
   getFriends(userId) {
     return db.prepare(`
       SELECT a.* FROM agents a
