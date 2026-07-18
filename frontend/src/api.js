@@ -28,6 +28,7 @@ async function request(path, options = {}) {
 
 export const api = {
   getAgents: () => request('/api/agents'),
+  createAgent: (agent) => request('/api/agents', { method: 'POST', body: JSON.stringify(agent) }),
   getFriends: () => request('/api/friends'),
   addFriend: (agentId) => request(`/api/friends/${agentId}`, { method: 'POST' }),
   removeFriend: (agentId) => request(`/api/friends/${agentId}`, { method: 'DELETE' }),
